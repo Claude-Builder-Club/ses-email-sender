@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@aws-sdk/client-ses": "^3.1006.0",
+    "dotenv": "^17.3.1"
+  }
+}
