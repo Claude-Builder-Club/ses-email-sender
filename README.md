@@ -1,16 +1,15 @@
 # ses-email-sender
 
-Bulk HTML email sender using AWS SES. Reads a list of recipients from a CSV and sends each one a templated email with rate limiting.
+Bulk HTML email sender using AWS SES. Reads recipients from two source CSVs, deduplicates, and sends each one a templated email with rate limiting.
 
 ## Project Structure
 
 ```
-├── send_bulk.js          # Main send script
+├── send_bulk.js          # Main script: merges sources, deduplicates, and sends
 ├── templates/
-│   └── email.html        # HTML email template
+│   └── email.html        # HTML email template(s)
 ├── scripts/
-│   └── emails.py         # Utility to deduplicate emails from multiple CSVs
-├── emails.csv            # Recipient list (gitignored)
+│   └── emails.py         # Optional standalone utility to produce emails.csv
 ├── .env                  # Credentials (gitignored)
 └── .env.example          # Env var reference
 ```
@@ -38,36 +37,50 @@ EMAIL_SUBJECT=Your email subject line
 
 `EMAIL_FROM` must be a verified identity in your AWS SES account.
 
-**3. Add your recipient list**
+**3. Add your source CSVs**
 
-Place a CSV file at `emails.csv` with email addresses in the first column (index 0). A header row is fine — it's skipped automatically if it doesn't contain `@`.
+Place both files at the repo root (they are gitignored):
 
-```csv
-email
-alice@example.com
-bob@example.com
-```
+| File | Email column |
+|---|---|
+| `ASU Student Sign-ups.csv` | Column 2 — `.edu` signup email |
+| `Claude Builder Club Members.csv` | Column 4 — `Email` field |
 
-**4. Edit the email template**
+`send_bulk.js` reads both, deduplicates across them, and automatically skips members who have unsubscribed or left the group.
 
-Edit `templates/email.html` with your email content.
+**4. Add your email template**
+
+Place an HTML template in `templates/` and pass its path via `--template` at runtime.
 
 ## Usage
 
+**Bulk send:**
 ```bash
-node send_bulk.js
+node send_bulk.js --template ./templates/email.html
+```
+
+**Test send** (one real email to a single address before going bulk):
+```bash
+node send_bulk.js --template ./templates/email.html --test you@example.com
 ```
 
 Output shows live progress:
 ```
-Found 500 emails. Starting send...
+Found 500 unique emails. Starting send...
 
-✓ [1/500] alice@example.com
-✓ [2/500] bob@example.com
+✓ [1/500] alice@asu.edu
+✓ [2/500] bob@asu.edu
 ...
 
 Done. ✓ 498 sent, ✗ 2 failed.
 ```
+
+## CLI Flags
+
+| Flag | Required | Description |
+|---|---|---|
+| `--template <path>` | Yes | Path to the HTML email template |
+| `--test <email>` | No | Send to one address only (skips CSV reading) |
 
 ## Configuration
 
@@ -75,21 +88,10 @@ Edit the constants at the top of `send_bulk.js`:
 
 | Constant | Default | Description |
 |---|---|---|
-| `CSV_PATH` | `./emails.csv` | Path to recipient CSV |
-| `CSV_COLUMN` | `0` | Column index containing emails |
+| `SOURCES` | see file | Array of `{ path, column, filter? }` source CSVs |
 | `DELAY_MS` | `100` | Delay between sends (ms) |
 
 The default 100ms delay keeps throughput at ~10 emails/sec, safely under the SES default limit of 14/sec.
-
-## Deduplicating Emails from Multiple CSVs
-
-`scripts/emails.py` merges and deduplicates emails from multiple source CSVs into a single output file:
-
-```bash
-python3 scripts/emails.py
-```
-
-Edit the file paths and column indices at the top of the script to match your sources.
 
 ## AWS SES Requirements
 
